@@ -23,7 +23,7 @@ export default function Home() {
   const [generatedStories, setGeneratedStories] = useState<Story[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [approvedStories, setApprovedStories] = useState<Story[]>([]);
-  const [mode, setMode] = useState<"validate" | "generate">("validate");
+
 
   const getJobDisplayName = (job: string) => {
     return selectedLanguage === "fr" ? jobTranslations[job] || job : job;
