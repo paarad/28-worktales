@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { track } from '@vercel/analytics';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -24,7 +25,6 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [approvedStories, setApprovedStories] = useState<Story[]>([]);
 
-
   const getJobDisplayName = (job: string) => {
     return selectedLanguage === "fr" ? jobTranslations[job] || job : job;
   };
@@ -39,6 +39,14 @@ export default function Home() {
 
   const generateStories = async () => {
     if (!selectedJob) return;
+
+    // Track story generation event
+    track('story_generation_started', {
+      job: selectedJob,
+      tone: selectedTone,
+      language: selectedLanguage,
+      hasCustomStory: !!customStory.trim()
+    });
 
     setIsGenerating(true);
     try {
@@ -57,9 +65,23 @@ export default function Home() {
       const data = await response.json();
       if (data.stories) {
         setGeneratedStories(data.stories);
+        // Track successful generation
+        track('story_generation_completed', {
+          job: selectedJob,
+          tone: selectedTone,
+          language: selectedLanguage,
+          storiesGenerated: data.stories.length
+        });
       }
     } catch (error) {
       console.error("Error generating stories:", error);
+      // Track generation error
+      track('story_generation_failed', {
+        job: selectedJob,
+        tone: selectedTone,
+        language: selectedLanguage,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -70,15 +92,42 @@ export default function Home() {
     if (story) {
       setApprovedStories([...approvedStories, story]);
       setGeneratedStories(generatedStories.filter(s => s.id !== storyId));
+      
+      // Track story approval
+      track('story_approved', {
+        job: story.job,
+        tone: story.tone,
+        language: selectedLanguage,
+        wordCount: story.content.split(' ').length
+      });
     }
   };
 
   const rejectStory = (storyId: string) => {
-    setGeneratedStories(generatedStories.filter(s => s.id !== storyId));
+    const story = generatedStories.find(s => s.id === storyId);
+    if (story) {
+      setGeneratedStories(generatedStories.filter(s => s.id !== storyId));
+      
+      // Track story rejection
+      track('story_rejected', {
+        job: story.job,
+        tone: story.tone,
+        language: selectedLanguage
+      });
+    }
   };
 
   const generateBulkStories = async (count: number) => {
     if (!selectedJob || approvedStories.length === 0) return;
+
+    // Track bulk generation
+    track('bulk_generation_started', {
+      job: selectedJob,
+      tone: selectedTone,
+      language: selectedLanguage,
+      requestedCount: count,
+      approvedExamplesCount: approvedStories.length
+    });
 
     setIsGenerating(true);
     try {
@@ -97,12 +146,38 @@ export default function Home() {
       const data = await response.json();
       if (data.stories) {
         setApprovedStories([...approvedStories, ...data.stories]);
+        
+        // Track successful bulk generation
+        track('bulk_generation_completed', {
+          job: selectedJob,
+          tone: selectedTone,
+          language: selectedLanguage,
+          requestedCount: count,
+          actualCount: data.stories.length,
+          totalApproved: approvedStories.length + data.stories.length
+        });
       }
     } catch (error) {
       console.error("Error generating bulk stories:", error);
+      track('bulk_generation_failed', {
+        job: selectedJob,
+        tone: selectedTone,
+        language: selectedLanguage,
+        requestedCount: count,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  // Track language changes
+  const handleLanguageChange = (language: Language) => {
+    setSelectedLanguage(language);
+    track('language_changed', {
+      newLanguage: language,
+      previousLanguage: selectedLanguage
+    });
   };
 
   return (
@@ -139,7 +214,7 @@ export default function Home() {
                 <label className="text-sm font-medium mb-2 block">
                   {getLocalizedText("Language", "Langue")}
                 </label>
-                <Select value={selectedLanguage} onValueChange={(value: Language) => setSelectedLanguage(value)}>
+                <Select value={selectedLanguage} onValueChange={handleLanguageChange}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
